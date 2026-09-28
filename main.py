@@ -234,12 +234,17 @@ if selected_school:
         col1, col2, col3 = st.columns(3)
         
         target_range = None
+        top_n = None  # 그래프에 표기할 개수 제한 (None이면 전체)
+        
         if col1.button("일주일 (최근 7일)", use_container_width=True):
             target_range = (today_kst - datetime.timedelta(days=6), today_kst)
+            top_n = None  # 일주일은 전체 표기
         if col2.button("한 달 (최근 30일)", use_container_width=True):
             target_range = (today_kst - datetime.timedelta(days=29), today_kst)
+            top_n = 10    # 한 달은 상위 10일
         if col3.button("1년 (최근 365일)", use_container_width=True):
             target_range = (today_kst - datetime.timedelta(days=364), today_kst)
+            top_n = 15    # 1년은 상위 15일
             
         if target_range:
             start_d, end_d = target_range
@@ -267,14 +272,23 @@ if selected_school:
                 
                 df = pd.DataFrame(df_data)
                 
-                # 2. Plotly 꺾은선 그래프 생성
+                # 2. 조건별 그래프용 데이터 필터링
+                if top_n and len(df) > top_n:
+                    # 칼로리가 높은 순으로 상위 top_n개 추출 후 다시 날짜순 정렬
+                    df_graph = df.nlargest(top_n, "칼로리(kcal)").sort_values("날짜")
+                    graph_title = f"📈 칼로리 상위 {top_n}일 추이 그래프 (마우스를 올리면 메뉴가 표시됩니다)"
+                else:
+                    df_graph = df.sort_values("날짜")
+                    graph_title = "📈 전체 급식 칼로리 추이 그래프 (마우스를 올리면 메뉴가 표시됩니다)"
+                
+                # 3. Plotly 꺾은선 그래프 생성
                 fig = px.line(
-                    df, 
+                    df_graph, 
                     x="날짜", 
                     y="칼로리(kcal)", 
                     hover_data={"메뉴": True, "칼로리(kcal)": ":.1f", "날짜": True},
                     markers=True,
-                    title="📈 일자별 급식 칼로리 추이 (마우스를 올리면 메뉴가 표시됩니다)"
+                    title=graph_title
                 )
                 
                 # 그래프 레이아웃 커스텀
@@ -291,7 +305,7 @@ if selected_school:
                 
                 st.plotly_chart(fig, use_container_width=True)
                 
-                # 3. 최고 칼로리 카드 출력
+                # 4. 최고 칼로리 카드 출력
                 max_meal = max(range_meals, key=lambda x: parse_calorie(x.get("CAL_INFO", "")))
                 st.success(f"🔥 해당 기간 최고 칼로리 날짜: {max_meal['MLSV_YMD']}")
                 render_flip_card(max_meal["MLSV_YMD"], max_meal["DDISH_NM"], max_meal["CAL_INFO"])
