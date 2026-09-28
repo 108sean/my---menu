@@ -46,25 +46,40 @@ def search_school(keyword):
             
     return []
 
-# 4. 급식 정보 조회 함수
-def get_meal_data(office_code, school_code, from_date, to_date):
+# 4. 급식 정보 조회 함수 (인증키 미사용 시 5건 제한을 극복하기 위해 pIndex 반복 호출)
+def get_meal_data(office_code, school_code, from_date, to_date, max_items=100):
     url = "https://open.neis.go.kr/hub/mealServiceDietInfo"
-    params = {
-        "Type": "json",
-        "ATPT_OFCDC_SC_CODE": office_code,
-        "SD_SCHUL_CODE": school_code,
-        "MMEAL_SC_CODE": "2",  # 중식
-        "MLSV_FROM_YMD": from_date.strftime("%Y%m%d"),
-        "MLSV_TO_YMD": to_date.strftime("%Y%m%d")
-    }
+    all_meals = []
+    p_index = 1
     
-    try:
-        res = requests.get(url, params=params).json()
-        if "mealServiceDietInfo" in res:
-            return res["mealServiceDietInfo"][1]["row"]
-    except Exception:
-        pass
-    return []
+    # 인증키 없이도 페이지를 넘겨가며 데이터를 수집
+    while len(all_meals) < max_items and p_index <= 20:  # 무한루프 방지
+        params = {
+            "Type": "json",
+            "ATPT_OFCDC_SC_CODE": office_code,
+            "SD_SCHUL_CODE": school_code,
+            "MMEAL_SC_CODE": "2",  # 중식
+            "MLSV_FROM_YMD": from_date.strftime("%Y%m%d"),
+            "MLSV_TO_YMD": to_date.strftime("%Y%m%d"),
+            "pIndex": p_index
+        }
+        
+        try:
+            res = requests.get(url, params=params).json()
+            if "mealServiceDietInfo" in res:
+                rows = res["mealServiceDietInfo"][1]["row"]
+                all_meals.extend(rows)
+                # 가져온 건수가 5건 미만이면 더 이상 데이터가 없음을 의미
+                if len(rows) < 5:
+                    break
+            else:
+                break
+        except Exception:
+            break
+        
+        p_index += 1
+        
+    return all_meals
 
 # 5. 칼로리 파싱 함수 (문자열 -> float)
 def parse_calorie(cal_str):
@@ -219,7 +234,8 @@ if selected_school:
             selected_school["ATPT_OFCDC_SC_CODE"],
             selected_school["SD_SCHUL_CODE"],
             selected_date,
-            selected_date
+            selected_date,
+            max_items=1
         )
         
         if meals:
@@ -234,28 +250,33 @@ if selected_school:
         col1, col2, col3 = st.columns(3)
         
         target_range = None
-        top_n = None  # 그래프에 표기할 개수 제한 (None이면 전체)
+        top_n = None
+        req_items = 100
         
-        if col1.button("일주일 (최근 7일)", use_container_width=True):
+        if col1.button("일주일 (최근 7일 - 전체)", use_container_width=True):
             target_range = (today_kst - datetime.timedelta(days=6), today_kst)
-            top_n = None  # 일주일은 전체 표기
-        if col2.button("한 달 (최근 30일)", use_container_width=True):
+            top_n = None  # 일주일 전체 표시
+            req_items = 10
+        if col2.button("한 달 (최근 30일 - 상위 10일)", use_container_width=True):
             target_range = (today_kst - datetime.timedelta(days=29), today_kst)
-            top_n = 10    # 한 달은 상위 10일
-        if col3.button("1년 (최근 365일)", use_container_width=True):
+            top_n = 10    # 상위 10일 표시
+            req_items = 30
+        if col3.button("1년 (최근 365일 - 상위 15일)", use_container_width=True):
             target_range = (today_kst - datetime.timedelta(days=364), today_kst)
-            top_n = 15    # 1년은 상위 15일
+            top_n = 15    # 상위 15일 표시
+            req_items = 100
             
         if target_range:
             start_d, end_d = target_range
             st.write(f"**조회 기간:** {start_d} ~ {end_d}")
             
-            with st.spinner("급식 데이터를 조회 중입니다..."):
+            with st.spinner("데이터 수집 중입니다... (데이터가 많을 경우 몇 초 걸릴 수 있습니다)"):
                 range_meals = get_meal_data(
                     selected_school["ATPT_OFCDC_SC_CODE"],
                     selected_school["SD_SCHUL_CODE"],
                     start_d,
-                    end_d
+                    end_d,
+                    max_items=req_items
                 )
                 
             if range_meals:
@@ -274,12 +295,11 @@ if selected_school:
                 
                 # 2. 조건별 그래프용 데이터 필터링
                 if top_n and len(df) > top_n:
-                    # 칼로리가 높은 순으로 상위 top_n개 추출 후 다시 날짜순 정렬
                     df_graph = df.nlargest(top_n, "칼로리(kcal)").sort_values("날짜")
-                    graph_title = f"📈 칼로리 상위 {top_n}일 추이 그래프 (마우스를 올리면 메뉴가 표시됩니다)"
+                    graph_title = f"📈 칼로리 상위 {top_n}일 추이 그래프"
                 else:
                     df_graph = df.sort_values("날짜")
-                    graph_title = "📈 전체 급식 칼로리 추이 그래프 (마우스를 올리면 메뉴가 표시됩니다)"
+                    graph_title = f"📈 전체 급식({len(df)}일) 칼로리 추이 그래프"
                 
                 # 3. Plotly 꺾은선 그래프 생성
                 fig = px.line(
@@ -291,7 +311,6 @@ if selected_school:
                     title=graph_title
                 )
                 
-                # 그래프 레이아웃 커스텀
                 fig.update_traces(
                     line_color="#FF6B6B",
                     line_width=3,
@@ -310,6 +329,6 @@ if selected_school:
                 st.success(f"🔥 해당 기간 최고 칼로리 날짜: {max_meal['MLSV_YMD']}")
                 render_flip_card(max_meal["MLSV_YMD"], max_meal["DDISH_NM"], max_meal["CAL_INFO"])
             else:
-                st.warning("선택한 기간 내에 급식 데이터가 존재하지 않거나 제한된 데이터만 수신되었습니다.")
+                st.warning("선택한 기간 내에 급식 데이터가 존재하지 않습니다.")
 else:
     st.info("👈 왼쪽 사이드바에서 학교 이름을 검색해 선택해 주세요.")
