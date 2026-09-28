@@ -10,13 +10,13 @@ import plotly.express as px
 # 1. 페이지 설정
 st.set_page_config(page_title="가장 칼로리가 높았던 메뉴", page_icon="🍱", layout="wide")
 
-# 2. 한국 시간(KST) 기준 오늘 날짜 가져오기
+# 2. 한국 시간(KST) 기준 오늘 날짜
 kst = pytz.timezone("Asia/Seoul")
 today_kst = datetime.datetime.now(kst).date()
 
 st.title("🍱 가장 칼로리가 높았던 메뉴")
 
-# 3. 학교 검색 함수 (줄임말 자동 보정 포함)
+# 3. 학교 검색 함수
 def search_school(keyword):
     url = "https://open.neis.go.kr/hub/schoolInfo"
     params = {"Type": "json", "SCHUL_NM": keyword}
@@ -28,7 +28,6 @@ def search_school(keyword):
     except Exception:
         pass
     
-    # 1차 검색 실패 시 줄임말 대체 후 2차 검색
     alt_keyword = keyword
     if "여고" in alt_keyword:
         alt_keyword = alt_keyword.replace("여고", "여자고등학교")
@@ -46,13 +45,13 @@ def search_school(keyword):
             
     return []
 
-# 4. 급식 정보 조회 함수 (페이지네이션으로 제한 없이 수집)
+# 4. 급식 정보 조회 함수
 def get_meal_data(office_code, school_code, from_date, to_date, max_items=100):
     url = "https://open.neis.go.kr/hub/mealServiceDietInfo"
     all_meals = []
     p_index = 1
     
-    while len(all_meals) < max_items and p_index <= 30:  # 최대 30페이지 수집
+    while len(all_meals) < max_items and p_index <= 30:
         params = {
             "Type": "json",
             "ATPT_OFCDC_SC_CODE": office_code,
@@ -79,14 +78,14 @@ def get_meal_data(office_code, school_code, from_date, to_date, max_items=100):
         
     return all_meals
 
-# 5. 칼로리 파싱 함수 (문자열 -> float)
+# 5. 칼로리 파싱 함수
 def parse_calorie(cal_str):
     if not cal_str:
         return 0.0
     match = re.search(r"([\d\.]+)", cal_str)
     return float(match.group(1)) if match else 0.0
 
-# 6. 메뉴 텍스트 정제 함수 (알레르기 번호 제거)
+# 6. 메뉴 텍스트 정제 함수
 def clean_menu(menu_str):
     if not menu_str:
         return ""
@@ -94,7 +93,7 @@ def clean_menu(menu_str):
     cleaned = re.sub(r"\([0-9\.]+\)", "", cleaned)
     return cleaned
 
-# 7. 클릭 시 뒤집히는 HTML/CSS/JS 플립 카드 렌더링
+# 7. 플립 카드 렌더링 함수
 def render_flip_card(date_str, menu_text, cal_text):
     formatted_menu = menu_text.replace("<br/>", "\n")
     cleaned_menu_text = clean_menu(formatted_menu).replace(", ", "<br/>")
@@ -217,7 +216,7 @@ if search_input:
         selected_option = st.sidebar.selectbox("학교를 선택하세요", list(options.keys()))
         selected_school = options[selected_option]
     else:
-        st.sidebar.error("검색된 학교가 없습니다. 정확한 명칭을 입력해 주세요.")
+        st.sidebar.error("검색된 학교가 없습니다.")
 
 # ----------------- 메인 영역 -----------------
 if selected_school:
@@ -225,7 +224,6 @@ if selected_school:
     
     tab1, tab2 = st.tabs(["📅 날짜별 조회", "🏆 최고 칼로리 분석 & 그래프"])
     
-    # [TAB 1] 특정 날짜 선택 및 카드 출력
     with tab1:
         selected_date = st.date_input("조회할 날짜를 선택하세요", value=today_kst)
         meals = get_meal_data(
@@ -242,33 +240,31 @@ if selected_school:
         else:
             st.info("해당 날짜에는 급식 정보가 없습니다.")
             
-    # [TAB 2] 기간별 최고 칼로리 탐색 및 꺾은선 그래프
     with tab2:
-        st.write("기간을 선택하면 **칼로리 추이 그래프**와 **가장 칼로리가 높았던 날**의 급식을 보여드립니다.")
+        st.write("기간 버튼을 클릭하면 **해당 개수(7개, 10개, 20개)**만큼 상위 칼로리 날짜가 그래프에 표기됩니다.")
         col1, col2, col3 = st.columns(3)
         
         target_range = None
         top_n = None
         req_items = 100
         
-        if col1.button("일주일 (모든 날 표기)", use_container_width=True):
-            target_range = (today_kst - datetime.timedelta(days=6), today_kst)
-            top_n = None  # 일주일은 전체 표시
-            req_items = 10
+        if col1.button("일주일 (상위 7일)", use_container_width=True):
+            target_range = (today_kst - datetime.timedelta(days=14), today_kst) # 주말/방학 대비 여유있게 범위 수집
+            top_n = 7
+            req_items = 15
         if col2.button("한 달 (상위 10일)", use_container_width=True):
-            target_range = (today_kst - datetime.timedelta(days=29), today_kst)
-            top_n = 10    # 상위 10일 표시
-            req_items = 30
+            target_range = (today_kst - datetime.timedelta(days=35), today_kst)
+            top_n = 10
+            req_items = 35
         if col3.button("1년 (상위 20일)", use_container_width=True):
-            target_range = (today_kst - datetime.timedelta(days=364), today_kst)
-            top_n = 20    # 상위 20일 표시
-            req_items = 150
+            target_range = (today_kst - datetime.timedelta(days=365), today_kst)
+            top_n = 20
+            req_items = 200
             
         if target_range:
             start_d, end_d = target_range
-            st.write(f"**조회 기간:** {start_d} ~ {end_d}")
             
-            with st.spinner("급식 데이터를 수집 중입니다..."):
+            with st.spinner("급식 데이터를 수집 및 분석 중입니다..."):
                 range_meals = get_meal_data(
                     selected_school["ATPT_OFCDC_SC_CODE"],
                     selected_school["SD_SCHUL_CODE"],
@@ -278,7 +274,6 @@ if selected_school:
                 )
                 
             if range_meals:
-                # 1. 데이터프레임 변환
                 df_data = []
                 for m in range_meals:
                     cal_val = parse_calorie(m.get("CAL_INFO", ""))
@@ -291,15 +286,15 @@ if selected_school:
                 
                 df = pd.DataFrame(df_data)
                 
-                # 2. 조건별 그래프용 데이터 필터링
-                if top_n and len(df) > top_n:
+                # 🎯 데이터 개수 제한 (7개, 10개, 20개 추출 후 날짜순 정렬)
+                if len(df) > top_n:
                     df_graph = df.nlargest(top_n, "칼로리(kcal)").sort_values("날짜")
-                    graph_title = f"📈 칼로리 상위 {top_n}일 추이 그래프 (가로: 날짜 / 세로: 칼로리)"
                 else:
                     df_graph = df.sort_values("날짜")
-                    graph_title = f"📈 전체 급식({len(df)}일) 칼로리 추이 그래프 (가로: 날짜 / 세로: 칼로리)"
                 
-                # 3. Plotly 꺾은선 그래프 생성 (가로=날짜, 세로=칼로리)
+                graph_title = f"📈 칼로리 상위 {len(df_graph)}개 데이터 그래프 (가로: 날짜 / 세로: 칼로리)"
+                
+                # Plotly 꺾은선 그래프
                 fig = px.line(
                     df_graph, 
                     x="날짜", 
@@ -316,13 +311,13 @@ if selected_school:
                 )
                 fig.update_layout(
                     hoverlabel=dict(bgcolor="white", font_size=13, font_family="sans-serif"),
-                    xaxis_title="날짜 (가로축)",
-                    yaxis_title="칼로리 kcal (세로축)"
+                    xaxis_title="날짜",
+                    yaxis_title="칼로리 (kcal)"
                 )
                 
                 st.plotly_chart(fig, use_container_width=True)
                 
-                # 4. 최고 칼로리 카드 출력
+                # 최고 칼로리 카드 출력
                 max_meal = max(range_meals, key=lambda x: parse_calorie(x.get("CAL_INFO", "")))
                 st.success(f"🔥 해당 기간 최고 칼로리 날짜: {max_meal['MLSV_YMD']}")
                 render_flip_card(max_meal["MLSV_YMD"], max_meal["DDISH_NM"], max_meal["CAL_INFO"])
