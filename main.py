@@ -4,6 +4,8 @@ import requests
 import datetime
 import pytz
 import re
+import pandas as pd
+import plotly.express as px
 
 # 1. 페이지 설정
 st.set_page_config(page_title="가장 칼로리가 높았던 메뉴", page_icon="🍱", layout="wide")
@@ -75,13 +77,14 @@ def parse_calorie(cal_str):
 def clean_menu(menu_str):
     if not menu_str:
         return ""
-    cleaned = menu_str.replace("<br/>", "\n")
+    cleaned = menu_str.replace("<br/>", ", ")
     cleaned = re.sub(r"\([0-9\.]+\)", "", cleaned)
     return cleaned
 
 # 7. 클릭 시 뒤집히는 HTML/CSS/JS 플립 카드 렌더링
 def render_flip_card(date_str, menu_text, cal_text):
-    clean_menu_display = clean_menu(menu_text).replace("\n", "<br/>")
+    formatted_menu = menu_text.replace("<br/>", "\n")
+    cleaned_menu_text = clean_menu(formatted_menu).replace(", ", "<br/>")
     
     card_html = f"""
     <!DOCTYPE html>
@@ -109,7 +112,6 @@ def render_flip_card(date_str, menu_text, cal_text):
         transition: transform 0.6s;
         transform-style: preserve-3d;
       }}
-      /* 클릭 시 flipped 클래스가 추가되어 뒤집힘 */
       .flip-card.flipped .flip-card-inner {{
         transform: rotateY(180deg);
       }}
@@ -174,7 +176,7 @@ def render_flip_card(date_str, menu_text, cal_text):
         <div class="flip-card-inner">
           <div class="flip-card-front">
             <div class="meal-title">📅 {date_str}</div>
-            <div class="meal-content">{clean_menu_display}</div>
+            <div class="meal-content">{cleaned_menu_text}</div>
             <div class="click-hint">👆 카드를 클릭하면 칼로리가 나옵니다</div>
           </div>
           <div class="flip-card-back">
@@ -208,7 +210,7 @@ if search_input:
 if selected_school:
     st.subheader(f"🏫 {selected_school['SCHUL_NM']} ({selected_school['LCTN_SC_NM']})")
     
-    tab1, tab2 = st.tabs(["📅 날짜별 조회", "🏆 최고 칼로리 메뉴"])
+    tab1, tab2 = st.tabs(["📅 날짜별 조회", "🏆 최고 칼로리 분석 & 그래프"])
     
     # [TAB 1] 특정 날짜 선택 및 카드 출력
     with tab1:
@@ -226,9 +228,9 @@ if selected_school:
         else:
             st.info("해당 날짜에는 급식 정보가 없습니다.")
             
-    # [TAB 2] 기간별 최고 칼로리 탐색
+    # [TAB 2] 기간별 최고 칼로리 탐색 및 꺾은선 그래프
     with tab2:
-        st.write("기간을 선택하면 해당 기간 중 **가장 칼로리가 높았던 날**의 급식을 찾아드립니다.")
+        st.write("기간을 선택하면 **칼로리 추이 그래프**와 **가장 칼로리가 높았던 날**의 급식을 보여드립니다.")
         col1, col2, col3 = st.columns(3)
         
         target_range = None
@@ -252,10 +254,48 @@ if selected_school:
                 )
                 
             if range_meals:
+                # 1. 데이터프레임 변환
+                df_data = []
+                for m in range_meals:
+                    cal_val = parse_calorie(m.get("CAL_INFO", ""))
+                    clean_m = clean_menu(m.get("DDISH_NM", ""))
+                    df_data.append({
+                        "날짜": m.get("MLSV_YMD"),
+                        "칼로리(kcal)": cal_val,
+                        "메뉴": clean_m
+                    })
+                
+                df = pd.DataFrame(df_data)
+                
+                # 2. Plotly 꺾은선 그래프 생성
+                fig = px.line(
+                    df, 
+                    x="날짜", 
+                    y="칼로리(kcal)", 
+                    hover_data={"메뉴": True, "칼로리(kcal)": ":.1f", "날짜": True},
+                    markers=True,
+                    title="📈 일자별 급식 칼로리 추이 (마우스를 올리면 메뉴가 표시됩니다)"
+                )
+                
+                # 그래프 레이아웃 커스텀
+                fig.update_traces(
+                    line_color="#FF6B6B",
+                    line_width=3,
+                    marker=dict(size=8, color="#EE5253")
+                )
+                fig.update_layout(
+                    hoverlabel=dict(bgcolor="white", font_size=13, font_family="sans-serif"),
+                    xaxis_title="급식 날짜",
+                    yaxis_title="칼로리 (kcal)"
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # 3. 최고 칼로리 카드 출력
                 max_meal = max(range_meals, key=lambda x: parse_calorie(x.get("CAL_INFO", "")))
-                st.success(f"🔥 최고 칼로리 날짜: {max_meal['MLSV_YMD']}")
+                st.success(f"🔥 해당 기간 최고 칼로리 날짜: {max_meal['MLSV_YMD']}")
                 render_flip_card(max_meal["MLSV_YMD"], max_meal["DDISH_NM"], max_meal["CAL_INFO"])
             else:
-                st.warning("선택한 기간 내에 급식 데이터가 존재하지 않거나, 인증키 미사용으로 제한된 결과만 제공됩니다.")
+                st.warning("선택한 기간 내에 급식 데이터가 존재하지 않거나 제한된 데이터만 수신되었습니다.")
 else:
     st.info("👈 왼쪽 사이드바에서 학교 이름을 검색해 선택해 주세요.")
