@@ -4,7 +4,6 @@ import requests
 import datetime
 import pytz
 import re
-import pandas as pd
 
 # 1. 페이지 기본 설정
 st.set_page_config(page_title="급식 칼로리 조회", page_icon="🍱", layout="wide")
@@ -13,7 +12,7 @@ st.set_page_config(page_title="급식 칼로리 조회", page_icon="🍱", layou
 kst = pytz.timezone("Asia/Seoul")
 today_kst = datetime.datetime.now(kst).date()
 
-st.title("🍱 학교 급식 칼로리 조회")
+st.title("🍱 학교 급식 최고 칼로리 메뉴")
 
 # 3. 학교 검색 함수
 def search_school(keyword):
@@ -92,10 +91,9 @@ def clean_menu(menu_str):
     return cleaned
 
 # 7. 클릭 반응형 플립 카드 UI
-def render_flip_card(date_str, menu_text, cal_text, rank=None):
+def render_flip_card(date_str, menu_text, cal_text, label="최고 칼로리"):
     formatted_menu = menu_text.replace("<br/>", "\n")
     cleaned_menu_text = clean_menu(formatted_menu).replace(", ", "<br/>")
-    rank_badge = f"🏆 TOP {rank}" if rank else ""
     
     card_html = f"""
     <!DOCTYPE html>
@@ -111,7 +109,7 @@ def render_flip_card(date_str, menu_text, cal_text, rank=None):
       .flip-card {{
         background-color: transparent;
         width: 100%;
-        height: 260px;
+        height: 300px;
         perspective: 1000px;
         cursor: pointer;
       }}
@@ -132,8 +130,8 @@ def render_flip_card(date_str, menu_text, cal_text, rank=None):
         height: 100%;
         -webkit-backface-visibility: hidden;
         backface-visibility: hidden;
-        border-radius: 14px;
-        padding: 16px;
+        border-radius: 16px;
+        padding: 20px;
         box-sizing: border-box;
         display: flex;
         flex-direction: column;
@@ -144,50 +142,50 @@ def render_flip_card(date_str, menu_text, cal_text, rank=None):
       .flip-card-front {{
         background: #ffffff;
         color: #212529;
-        border: 1px solid #e0e0e0;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+        border: 2px solid #e0e0e0;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
       }}
       .flip-card-back {{
         background: linear-gradient(135deg, #ff6b6b 0%, #ee5253 100%);
         color: white;
         transform: rotateY(180deg);
-        box-shadow: 0 4px 10px rgba(0,0,0,0.12);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
       }}
-      .rank-tag {{
-        font-size: 0.8rem;
+      .badge {{
+        font-size: 0.85rem;
         font-weight: 700;
         color: #ff6b6b;
         background: #ffe3e3;
-        padding: 2px 8px;
-        border-radius: 10px;
-        margin-bottom: 6px;
+        padding: 4px 10px;
+        border-radius: 12px;
+        margin-bottom: 8px;
       }}
       .meal-date {{
-        font-size: 1rem;
+        font-size: 1.1rem;
         font-weight: 700;
-        margin-bottom: 8px;
+        margin-bottom: 10px;
         color: #343a40;
       }}
       .meal-content {{
-        font-size: 0.88rem;
-        line-height: 1.4;
+        font-size: 0.95rem;
+        line-height: 1.45;
         color: #495057;
-        max-height: 140px;
+        max-height: 150px;
         overflow-y: auto;
       }}
       .calorie-title {{
-        font-size: 1.1rem;
+        font-size: 1.2rem;
         font-weight: 600;
-        margin-bottom: 6px;
+        margin-bottom: 8px;
       }}
       .calorie-value {{
-        font-size: 2rem;
+        font-size: 2.2rem;
         font-weight: 800;
       }}
       .click-hint {{
-        font-size: 0.75rem;
-        margin-top: 10px;
-        opacity: 0.75;
+        font-size: 0.8rem;
+        margin-top: 12px;
+        opacity: 0.8;
       }}
     </style>
     </head>
@@ -195,7 +193,7 @@ def render_flip_card(date_str, menu_text, cal_text, rank=None):
       <div class="flip-card" onclick="this.classList.toggle('flipped')">
         <div class="flip-card-inner">
           <div class="flip-card-front">
-            {f'<div class="rank-tag">{rank_badge}</div>' if rank else ''}
+            <div class="badge">🔥 {label}</div>
             <div class="meal-date">📅 {date_str}</div>
             <div class="meal-content">{cleaned_menu_text}</div>
             <div class="click-hint">👆 클릭 시 칼로리 확인</div>
@@ -210,7 +208,7 @@ def render_flip_card(date_str, menu_text, cal_text, rank=None):
     </body>
     </html>
     """
-    components.html(card_html, height=280)
+    components.html(card_html, height=320)
 
 # ----------------- 사이드바 -----------------
 st.sidebar.header("🔍 학교 검색")
@@ -231,7 +229,7 @@ if search_input:
 if selected_school:
     st.subheader(f"🏫 {selected_school['SCHUL_NM']} ({selected_school['LCTN_SC_NM']})")
     
-    tab1, tab2 = st.tabs(["📅 날짜별 조회", "🏆 고칼로리 순위 모음"])
+    tab1, tab2 = st.tabs(["📅 날짜별 조회", "🏆 최고 칼로리 메뉴"])
     
     # 1. 일별 단일 조회
     with tab1:
@@ -246,29 +244,31 @@ if selected_school:
         
         if meals:
             meal = meals[0]
-            render_flip_card(meal["MLSV_YMD"], meal["DDISH_NM"], meal["CAL_INFO"])
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col2:
+                render_flip_card(meal["MLSV_YMD"], meal["DDISH_NM"], meal["CAL_INFO"], label="선택 날짜 급식")
         else:
             st.info("해당 날짜에 급식 정보가 없습니다.")
             
-    # 2. 기간별 고칼로리 카드 목록
+    # 2. 기간별 1개 최고 칼로리 카드 출력
     with tab2:
-        st.write("원하는 기간을 선택하면 **상위 칼로리 메뉴**가 카드로 제공됩니다.")
+        st.write("원하는 기간을 선택하면 **기간 내 가장 칼로리가 높았던 1개 메뉴**가 표시됩니다.")
         col1, col2, col3 = st.columns(3)
         
         target_days = None
-        target_count = None
+        period_label = ""
         
-        if col1.button("일주일 (7개)", use_container_width=True):
-            target_days = 20  # 방학/주말 고려해 여유있는 검색 범위 설정
-            target_count = 7
-        if col2.button("한 달 (10개)", use_container_width=True):
-            target_days = 45
-            target_count = 10
-        if col3.button("1년 (20개)", use_container_width=True):
+        if col1.button("일주일 최고", use_container_width=True):
+            target_days = 7
+            period_label = "최근 1주일 최고 칼로리"
+        if col2.button("한 달 최고", use_container_width=True):
+            target_days = 30
+            period_label = "최근 1달 최고 칼로리"
+        if col3.button("1년 최고", use_container_width=True):
             target_days = 365
-            target_count = 20
+            period_label = "최근 1년 최고 칼로리"
             
-        if target_days and target_count:
+        if target_days:
             start_date = today_kst - datetime.timedelta(days=target_days)
             
             with st.spinner("급식 정보를 불러오는 중입니다..."):
@@ -281,34 +281,18 @@ if selected_school:
                 )
                 
             if raw_meals:
-                # 데이터 정리 및 칼로리순 정렬
-                processed = []
-                for m in raw_meals:
-                    cal_val = parse_calorie(m.get("CAL_INFO", ""))
-                    processed.append({
-                        "date": m.get("MLSV_YMD"),
-                        "menu": m.get("DDISH_NM", ""),
-                        "cal_str": m.get("CAL_INFO", ""),
-                        "cal_val": cal_val
-                    })
+                # 최고 칼로리 메뉴 1개 추출
+                top_meal = max(raw_meals, key=lambda x: parse_calorie(x.get("CAL_INFO", "")))
                 
-                # 칼로리 내림차순 정렬 후 정확한 개수 추출
-                sorted_meals = sorted(processed, key=lambda x: x["cal_val"], reverse=True)[:target_count]
-                
-                st.write(f"### 📊 상위 {len(sorted_meals)}개 고칼로리 메뉴")
-                st.caption("카드를 클릭하면 뒷면에서 칼로리를 확인할 수 있습니다.")
-                
-                # 3열 카드 그리드 레이아웃 생성
-                grid_cols = st.columns(3)
-                for idx, item in enumerate(sorted_meals):
-                    col_idx = idx % 3
-                    with grid_cols[col_idx]:
-                        render_flip_card(
-                            item["date"],
-                            item["menu"],
-                            item["cal_str"],
-                            rank=idx + 1
-                        )
+                # 중앙에 1개 카드 표시
+                c1, c2, c3 = st.columns([1, 2, 1])
+                with c2:
+                    render_flip_card(
+                        top_meal["MLSV_YMD"],
+                        top_meal["DDISH_NM"],
+                        top_meal["CAL_INFO"],
+                        label=period_label
+                    )
             else:
                 st.warning("선택한 기간에 급식 데이터가 없습니다.")
 else:
