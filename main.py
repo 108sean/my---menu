@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import requests
 import datetime
 import pytz
@@ -11,79 +12,9 @@ st.set_page_config(page_title="가장 칼로리가 높았던 메뉴", page_icon=
 kst = pytz.timezone("Asia/Seoul")
 today_kst = datetime.datetime.now(kst).date()
 
-# 3. 플립 카드(Card Flip) CSS 스타일 지정
-st.markdown("""
-<style>
-.flip-card {
-  background-color: transparent;
-  width: 100%;
-  height: 260px;
-  perspective: 1000px;
-  margin-bottom: 20px;
-}
-.flip-card-inner {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  text-align: center;
-  transition: transform 0.6s;
-  transform-style: preserve-3d;
-  cursor: pointer;
-}
-.flip-card:hover .flip-card-inner {
-  transform: rotateY(180deg);
-}
-.flip-card-front, .flip-card-back {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
-  border-radius: 12px;
-  padding: 18px;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-}
-.flip-card-front {
-  background: linear-gradient(135deg, #ffffff 0%, #f1f3f5 100%);
-  color: #212529;
-  border: 2px solid #e9ecef;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-}
-.flip-card-back {
-  background: linear-gradient(135deg, #ff6b6b 0%, #ff8e8e 100%);
-  color: white;
-  transform: rotateY(180deg);
-  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-}
-.meal-title {
-  font-size: 1.1rem;
-  font-weight: bold;
-  margin-bottom: 8px;
-}
-.meal-content {
-  font-size: 0.9rem;
-  line-height: 1.4;
-  color: #495057;
-}
-.calorie-title {
-  font-size: 1.2rem;
-  font-weight: bold;
-  margin-bottom: 5px;
-}
-.calorie-value {
-  font-size: 1.8rem;
-  font-weight: 800;
-}
-</style>
-""", unsafe_allow_html=True)
-
 st.title("🍱 가장 칼로리가 높았던 메뉴")
 
-# 4. 학교 검색 함수 (줄임말 자동 보정 포함)
+# 3. 학교 검색 함수 (줄임말 자동 보정 포함)
 def search_school(keyword):
     url = "https://open.neis.go.kr/hub/schoolInfo"
     params = {"Type": "json", "SCHUL_NM": keyword}
@@ -113,7 +44,7 @@ def search_school(keyword):
             
     return []
 
-# 5. 급식 정보 조회 함수
+# 4. 급식 정보 조회 함수
 def get_meal_data(office_code, school_code, from_date, to_date):
     url = "https://open.neis.go.kr/hub/mealServiceDietInfo"
     params = {
@@ -133,41 +64,130 @@ def get_meal_data(office_code, school_code, from_date, to_date):
         pass
     return []
 
-# 6. 칼로리 파싱 함수 (문자열 -> float)
+# 5. 칼로리 파싱 함수 (문자열 -> float)
 def parse_calorie(cal_str):
     if not cal_str:
         return 0.0
     match = re.search(r"([\d\.]+)", cal_str)
     return float(match.group(1)) if match else 0.0
 
-# 7. 메뉴 텍스트 정제 함수 (알레르기 번호 제거)
+# 6. 메뉴 텍스트 정제 함수 (알레르기 번호 제거)
 def clean_menu(menu_str):
     if not menu_str:
         return ""
-    # <br/> 태그를 줄바꿈으로 변환 및 괄호 숫자(알레르기) 제거
     cleaned = menu_str.replace("<br/>", "\n")
     cleaned = re.sub(r"\([0-9\.]+\)", "", cleaned)
     return cleaned
 
-# 8. 플립 카드 HTML 생성 함수
+# 7. 클릭 시 뒤집히는 HTML/CSS/JS 플립 카드 렌더링
 def render_flip_card(date_str, menu_text, cal_text):
     clean_menu_display = clean_menu(menu_text).replace("\n", "<br/>")
+    
     card_html = f"""
-    <div class="flip-card">
-      <div class="flip-card-inner">
-        <div class="flip-card-front">
-          <div class="meal-title">📅 {date_str}</div>
-          <div class="meal-content">{clean_menu_display}</div>
-        </div>
-        <div class="flip-card-back">
-          <div class="calorie-title">🔥 열량 정보</div>
-          <div class="calorie-value">{cal_text}</div>
-          <div style="font-size: 0.8rem; margin-top: 10px;">(마우스를 대거나 누르면 뒤집힙니다)</div>
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <style>
+      body {{
+        margin: 0;
+        padding: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background-color: transparent;
+      }}
+      .flip-card {{
+        background-color: transparent;
+        width: 100%;
+        height: 280px;
+        perspective: 1000px;
+        cursor: pointer;
+      }}
+      .flip-card-inner {{
+        position: relative;
+        width: 100%;
+        height: 100%;
+        text-align: center;
+        transition: transform 0.6s;
+        transform-style: preserve-3d;
+      }}
+      /* 클릭 시 flipped 클래스가 추가되어 뒤집힘 */
+      .flip-card.flipped .flip-card-inner {{
+        transform: rotateY(180deg);
+      }}
+      .flip-card-front, .flip-card-back {{
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        -webkit-backface-visibility: hidden;
+        backface-visibility: hidden;
+        border-radius: 16px;
+        padding: 20px;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        user-select: none;
+      }}
+      .flip-card-front {{
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        color: #212529;
+        border: 2px solid #e9ecef;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      }}
+      .flip-card-back {{
+        background: linear-gradient(135deg, #ff6b6b 0%, #ee5253 100%);
+        color: white;
+        transform: rotateY(180deg);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      }}
+      .meal-title {{
+        font-size: 1.1rem;
+        font-weight: 700;
+        margin-bottom: 12px;
+        color: #343a40;
+      }}
+      .meal-content {{
+        font-size: 0.95rem;
+        line-height: 1.5;
+        color: #495057;
+        max-height: 180px;
+        overflow-y: auto;
+      }}
+      .calorie-title {{
+        font-size: 1.2rem;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }}
+      .calorie-value {{
+        font-size: 2.2rem;
+        font-weight: 800;
+      }}
+      .click-hint {{
+        font-size: 0.8rem;
+        margin-top: 12px;
+        opacity: 0.8;
+      }}
+    </style>
+    </head>
+    <body>
+      <div class="flip-card" onclick="this.classList.toggle('flipped')">
+        <div class="flip-card-inner">
+          <div class="flip-card-front">
+            <div class="meal-title">📅 {date_str}</div>
+            <div class="meal-content">{clean_menu_display}</div>
+            <div class="click-hint">👆 카드를 클릭하면 칼로리가 나옵니다</div>
+          </div>
+          <div class="flip-card-back">
+            <div class="calorie-title">🔥 총 열량</div>
+            <div class="calorie-value">{cal_text}</div>
+            <div class="click-hint">👆 다시 클릭하면 메뉴를 볼 수 있습니다</div>
+          </div>
         </div>
       </div>
-    </div>
+    </body>
+    </html>
     """
-    st.markdown(card_html, unsafe_allow_html=True)
+    components.html(card_html, height=300)
 
 # ----------------- 사이드바: 학교 검색 -----------------
 st.sidebar.header("🔍 학교 검색")
@@ -232,11 +252,10 @@ if selected_school:
                 )
                 
             if range_meals:
-                # 가장 칼로리가 높은 날 찾기
                 max_meal = max(range_meals, key=lambda x: parse_calorie(x.get("CAL_INFO", "")))
                 st.success(f"🔥 최고 칼로리 날짜: {max_meal['MLSV_YMD']}")
                 render_flip_card(max_meal["MLSV_YMD"], max_meal["DDISH_NM"], max_meal["CAL_INFO"])
             else:
-                st.warning("선택한 기간 내에 급식 데이터가 존재하지 않거나, 인증키 미사용으로 최대 5건만 수신되어 결과를 찾지 못했습니다.")
+                st.warning("선택한 기간 내에 급식 데이터가 존재하지 않거나, 인증키 미사용으로 제한된 결과만 제공됩니다.")
 else:
     st.info("👈 왼쪽 사이드바에서 학교 이름을 검색해 선택해 주세요.")
