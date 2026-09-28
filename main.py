@@ -46,14 +46,13 @@ def search_school(keyword):
             
     return []
 
-# 4. 급식 정보 조회 함수 (인증키 미사용 시 5건 제한을 극복하기 위해 pIndex 반복 호출)
+# 4. 급식 정보 조회 함수 (페이지네이션으로 제한 없이 수집)
 def get_meal_data(office_code, school_code, from_date, to_date, max_items=100):
     url = "https://open.neis.go.kr/hub/mealServiceDietInfo"
     all_meals = []
     p_index = 1
     
-    # 인증키 없이도 페이지를 넘겨가며 데이터를 수집
-    while len(all_meals) < max_items and p_index <= 20:  # 무한루프 방지
+    while len(all_meals) < max_items and p_index <= 30:  # 최대 30페이지 수집
         params = {
             "Type": "json",
             "ATPT_OFCDC_SC_CODE": office_code,
@@ -69,7 +68,6 @@ def get_meal_data(office_code, school_code, from_date, to_date, max_items=100):
             if "mealServiceDietInfo" in res:
                 rows = res["mealServiceDietInfo"][1]["row"]
                 all_meals.extend(rows)
-                # 가져온 건수가 5건 미만이면 더 이상 데이터가 없음을 의미
                 if len(rows) < 5:
                     break
             else:
@@ -253,24 +251,24 @@ if selected_school:
         top_n = None
         req_items = 100
         
-        if col1.button("일주일 (최근 7일 - 전체)", use_container_width=True):
+        if col1.button("일주일 (모든 날 표기)", use_container_width=True):
             target_range = (today_kst - datetime.timedelta(days=6), today_kst)
-            top_n = None  # 일주일 전체 표시
+            top_n = None  # 일주일은 전체 표시
             req_items = 10
-        if col2.button("한 달 (최근 30일 - 상위 10일)", use_container_width=True):
+        if col2.button("한 달 (상위 10일)", use_container_width=True):
             target_range = (today_kst - datetime.timedelta(days=29), today_kst)
             top_n = 10    # 상위 10일 표시
             req_items = 30
-        if col3.button("1년 (최근 365일 - 상위 15일)", use_container_width=True):
+        if col3.button("1년 (상위 20일)", use_container_width=True):
             target_range = (today_kst - datetime.timedelta(days=364), today_kst)
-            top_n = 15    # 상위 15일 표시
-            req_items = 100
+            top_n = 20    # 상위 20일 표시
+            req_items = 150
             
         if target_range:
             start_d, end_d = target_range
             st.write(f"**조회 기간:** {start_d} ~ {end_d}")
             
-            with st.spinner("데이터 수집 중입니다... (데이터가 많을 경우 몇 초 걸릴 수 있습니다)"):
+            with st.spinner("급식 데이터를 수집 중입니다..."):
                 range_meals = get_meal_data(
                     selected_school["ATPT_OFCDC_SC_CODE"],
                     selected_school["SD_SCHUL_CODE"],
@@ -296,12 +294,12 @@ if selected_school:
                 # 2. 조건별 그래프용 데이터 필터링
                 if top_n and len(df) > top_n:
                     df_graph = df.nlargest(top_n, "칼로리(kcal)").sort_values("날짜")
-                    graph_title = f"📈 칼로리 상위 {top_n}일 추이 그래프"
+                    graph_title = f"📈 칼로리 상위 {top_n}일 추이 그래프 (가로: 날짜 / 세로: 칼로리)"
                 else:
                     df_graph = df.sort_values("날짜")
-                    graph_title = f"📈 전체 급식({len(df)}일) 칼로리 추이 그래프"
+                    graph_title = f"📈 전체 급식({len(df)}일) 칼로리 추이 그래프 (가로: 날짜 / 세로: 칼로리)"
                 
-                # 3. Plotly 꺾은선 그래프 생성
+                # 3. Plotly 꺾은선 그래프 생성 (가로=날짜, 세로=칼로리)
                 fig = px.line(
                     df_graph, 
                     x="날짜", 
@@ -318,8 +316,8 @@ if selected_school:
                 )
                 fig.update_layout(
                     hoverlabel=dict(bgcolor="white", font_size=13, font_family="sans-serif"),
-                    xaxis_title="급식 날짜",
-                    yaxis_title="칼로리 (kcal)"
+                    xaxis_title="날짜 (가로축)",
+                    yaxis_title="칼로리 kcal (세로축)"
                 )
                 
                 st.plotly_chart(fig, use_container_width=True)
